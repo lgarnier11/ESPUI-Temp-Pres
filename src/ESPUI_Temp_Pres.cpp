@@ -52,7 +52,7 @@ Preferences preferences;
 #define DNS_PORT 53
 IPAddress apIP(192, 168, 4, 1);
 DNSServer dnsServer;
-const char* hostname = "ESPUI-Temp-Pression-1.0";
+const char* hostname = "ESPUI-Temp-Pression-1.0.3";
 bool wificonnected = false;
 //Web server==================================
 
@@ -68,10 +68,12 @@ unsigned long last_millis = 0;
 #include <ESPUI.h>
 uint16_t wifi_ssid_text, wifi_pass_text, wifi_ssid_timeout_text;
 uint16_t mesure_temp_text, mesure_pres_text, cmdMesureOn, cmdMesureOff;
+uint16_t param_delay_temp_text, param_delay_pres_text;
 uint16_t mqtt_server_text, mqtt_topic_in_text, mqtt_topic_out_text, mqtt_user_text, mqtt_pass_text, mqtt_enabled_switch;
 uint16_t statusLabelId, serialLabelId;
 String option;
 String stored_ssid, stored_pass;
+int stored_delay_temp, stored_delay_pres;
 int stored_ssid_timeout;
 String stored_mqtt_server, stored_mqtt_user, stored_mqtt_pass, stored_mqtt_topic_in, stored_mqtt_topic_out;
 
@@ -104,6 +106,11 @@ String splitString(String data, char separator, int index) {
 //WiFi settings callback=====================================================
 void SaveWifiDetailsCallback(Control *sender, int type) {
   if (type == B_UP) {
+    stored_delay_temp = ESPUI.getControl(param_delay_temp_text)->value.toInt();
+    stored_delay_pres = ESPUI.getControl(param_delay_pres_text)->value.toInt();
+    preferences.putInt("delayTemp", stored_delay_temp);
+    preferences.putInt("delayPres", stored_delay_pres);
+
     stored_ssid = ESPUI.getControl(wifi_ssid_text)->value;
     stored_pass = ESPUI.getControl(wifi_pass_text)->value;
     stored_ssid_timeout = ESPUI.getControl(wifi_ssid_timeout_text)->value.toInt();
@@ -138,6 +145,23 @@ void SaveWifiDetailsCallback(Control *sender, int type) {
   }
 }
 //WiFi settings callback=====================================================
+
+//Param settings callback=====================================================
+void SaveParam(Control *sender, int type) {
+  if (type == B_UP) {
+    stored_delay_temp = ESPUI.getControl(param_delay_temp_text)->value.toInt();
+    stored_delay_pres = ESPUI.getControl(param_delay_pres_text)->value.toInt();
+    preferences.putInt("delayTemp", stored_delay_temp);
+    preferences.putInt("delayPres", stored_delay_pres);
+
+    Serial.println(stored_delay_temp);
+    Serial.println(stored_delay_pres);
+ 
+
+    Serial.println("Saving params");
+  }
+}
+//Param settings callback=====================================================
 
 //ESP Reset=================================
 void ESPReset(Control *sender, int type) {
@@ -176,16 +200,27 @@ void espui_init() {
   // auto demo_button = ESPUI.addControl(Button, "", "Button", None, demo_tab, textCallback);
   //Custom UI..............................................................................
 
-//Mesure-------------------------------------------------------------------------------------------------------------------
+  //Mesure-------------------------------------------------------------------------------------------------------------------
   auto mesuretab = ESPUI.addControl(Tab, "", "Mesures");
-  mesure_temp_text = ESPUI.addControl(Label, "Température", stored_ssid, Peterriver, mesuretab, textCallback);
-  mesure_pres_text = ESPUI.addControl(Label, "Pression", stored_pass, Peterriver, mesuretab, textCallback);
+  mesure_temp_text = ESPUI.addControl(Label, "Température", "", Peterriver, mesuretab, textCallback);
+  mesure_pres_text = ESPUI.addControl(Label, "Pression", "", Peterriver, mesuretab, textCallback);
   cmdMesureOn = ESPUI.addControl(Button, "", "Pause", Peterriver, mesuretab, cmdMesurerOn);
   cmdMesureOff = ESPUI.addControl(Button, "", "Reprendre", Peterriver, mesuretab, cmdMesurerOff);
   ESPUI.setEnabled(cmdMesureOn, true);
   ESPUI.setEnabled(cmdMesureOff, false);
-  //WiFi-------------------------------------------------------------------------------------------------------------------
+  //Mesure-------------------------------------------------------------------------------------------------------------------
   
+  
+  //Param-----------------------------------------------------------------------------------------------
+  auto paramtab = ESPUI.addControl(Tab, "", "Paramétrage");
+  param_delay_temp_text = ESPUI.addControl(Text, "Température", String(stored_delay_temp), Peterriver, paramtab, textCallback);
+  param_delay_pres_text = ESPUI.addControl(Text, "Pression", String(stored_delay_pres), Peterriver, paramtab, textCallback);
+  auto paramSave = ESPUI.addControl(Button, "Save", "Save", Peterriver, paramtab, SaveParam);
+  ESPUI.setEnabled(param_delay_temp_text, true);
+  ESPUI.setEnabled(param_delay_pres_text, true);
+  ESPUI.setEnabled(paramSave, true);
+  //Param-----------------------------------------------------------------------------------------------
+
   //Maintab-----------------------------------------------------------------------------------------------
   auto maintab = ESPUI.addControl(Tab, "", "Debug");
   serialLabelId = ESPUI.addControl(Label, "Serial", "Serial IN", Peterriver, maintab, textCallback);
@@ -308,7 +343,21 @@ void SerialSetup(String input) {
     preferences.putString("ssid", stored_ssid);
     Serial.println("New SSID : " + stored_ssid);
   }
-
+  else if (input.indexOf("delayTemp") > -1) {
+    stored_delay_temp = splitString(input, ' ', 1).toInt();
+    preferences.putString("delayTemp", String(stored_delay_temp));
+    Serial.println("New delay temp : " + stored_delay_temp);
+  }
+  else if (input.indexOf("delayPres") > -1) {
+    stored_delay_pres = splitString(input, ' ', 1).toInt();
+    preferences.putString("delayPres", String(stored_delay_pres));
+    Serial.println("New delay pres : " + stored_delay_pres);
+  }
+  else if (input.indexOf("password") > -1) {
+    stored_pass = splitString(input, ' ', 1);
+    preferences.putString("pass", stored_pass);
+    Serial.println("New password : " + stored_pass);
+  }
   else if (input.indexOf("password") > -1) {
     stored_pass = splitString(input, ' ', 1);
     preferences.putString("pass", stored_pass);
@@ -427,6 +476,7 @@ void wifi_init() {
 //WiFi================================================================================
 //Temperature================================================================================
 void temp_init() {
+  stored_delay_temp = preferences.getInt("delayTemp", 1000);
   // Serial.println(9600);
   // DS18B20.begin();    // initialize the DS18B20 sensor
   //  Serial.begin(9600);
@@ -484,7 +534,7 @@ void temp_loop() {
     //   Serial.println("Parasite");
     // }
 
-    if (bMesure && millis() - last_temp_millis >= temp_delay) {
+    if (bMesure && millis() - last_temp_millis >= stored_delay_temp) {
       Serial.print("Temperature: ");
       Serial.print(ds.getTempC());
       Serial.print(" C");
@@ -503,6 +553,7 @@ void temp_loop() {
 
 //Pression================================================================================
 void pression_init() {
+  stored_delay_pres = preferences.getInt("delayPres", 1000);
     Serial.println(F("BMP280 Forced Mode Test."));
 
   //if (!bmp.begin(BMP280_ADDRESS_ALT, BMP280_CHIPID)) {
@@ -522,7 +573,7 @@ void pression_init() {
   }
 }
 void pression_loop() {
-  if (bMesure && millis() - last_pres_millis >= pres_delay) {
+  if (bMesure && millis() - last_pres_millis >= stored_delay_pres) {
     // must call this to wake sensor up and get new measurement data
     // it blocks until measurement is complete
     if (bmp.takeForcedMeasurement()) {
