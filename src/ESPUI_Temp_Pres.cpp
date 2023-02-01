@@ -24,6 +24,7 @@ unsigned long temp_delay = 1000;
 
 unsigned long last_pres_millis = 0;
 unsigned long pres_delay = 1000;
+bool bMesure = true;
 
 // G22 -> SCL
 // G21 -> SDA
@@ -66,7 +67,7 @@ unsigned long last_millis = 0;
 //ESPUI=================================================================================================================
 #include <ESPUI.h>
 uint16_t wifi_ssid_text, wifi_pass_text, wifi_ssid_timeout_text;
-uint16_t mesure_temp_text, mesure_pres_text;
+uint16_t mesure_temp_text, mesure_pres_text, cmdMesureOn, cmdMesureOff;
 uint16_t mqtt_server_text, mqtt_topic_in_text, mqtt_topic_out_text, mqtt_user_text, mqtt_pass_text, mqtt_enabled_switch;
 uint16_t statusLabelId, serialLabelId;
 String option;
@@ -146,9 +147,20 @@ void ESPReset(Control *sender, int type) {
 }
 //ESP Reset=================================
 //CMD MESURER=================================
-void cmdMesurer(Control *sender, int type) {
+void setCmdMesure() {
+    ESPUI.setEnabled(cmdMesureOn, bMesure);
+    ESPUI.setEnabled(cmdMesureOff, !bMesure);
+}
+void cmdMesurerOn(Control *sender, int type) {
   if (type == B_UP) {
-    ESP.restart();
+    bMesure = false;
+    setCmdMesure();
+  }
+}
+void cmdMesurerOff(Control *sender, int type) {
+  if (type == B_UP) {
+    bMesure = true;
+    setCmdMesure();
   }
 }
 //CMD MESURER=================================
@@ -166,9 +178,12 @@ void espui_init() {
 
 //Mesure-------------------------------------------------------------------------------------------------------------------
   auto mesuretab = ESPUI.addControl(Tab, "", "Mesures");
-  mesure_temp_text = ESPUI.addControl(Label, "Température", stored_ssid, Alizarin, mesuretab, textCallback);
-  mesure_pres_text = ESPUI.addControl(Label, "Pression", stored_pass, Alizarin, mesuretab, textCallback);
-  // auto cmdMesure = ESPUI.addControl(Button, "", "Mesurer", None, mesuretab, ESPReset);
+  mesure_temp_text = ESPUI.addControl(Label, "Température", stored_ssid, Peterriver, mesuretab, textCallback);
+  mesure_pres_text = ESPUI.addControl(Label, "Pression", stored_pass, Peterriver, mesuretab, textCallback);
+  cmdMesureOn = ESPUI.addControl(Button, "", "Pause", Peterriver, mesuretab, cmdMesurerOn);
+  cmdMesureOff = ESPUI.addControl(Button, "", "Reprendre", Peterriver, mesuretab, cmdMesurerOff);
+  ESPUI.setEnabled(cmdMesureOn, true);
+  ESPUI.setEnabled(cmdMesureOff, false);
   //WiFi-------------------------------------------------------------------------------------------------------------------
   
   //Maintab-----------------------------------------------------------------------------------------------
@@ -469,7 +484,7 @@ void temp_loop() {
     //   Serial.println("Parasite");
     // }
 
-    if (millis() - last_temp_millis >= temp_delay) {
+    if (bMesure && millis() - last_temp_millis >= temp_delay) {
       Serial.print("Temperature: ");
       Serial.print(ds.getTempC());
       Serial.print(" C");
@@ -507,7 +522,7 @@ void pression_init() {
   }
 }
 void pression_loop() {
-  if (millis() - last_pres_millis >= pres_delay) {
+  if (bMesure && millis() - last_pres_millis >= pres_delay) {
     // must call this to wake sensor up and get new measurement data
     // it blocks until measurement is complete
     if (bmp.takeForcedMeasurement()) {
