@@ -1,4 +1,21 @@
 /*
+ lgarnier11
+ v1.1.0 - 07/02/2023
+ Adaptation en c++ du "framework" Arduino de Neodyme.
+ Utilisation pour gérer une sonde de température (étanche) et
+ une sonde de pression.
+ Utilisation du circuit dans une cloche à vide.
+ Le circuit devient serveur wifi, avec une page qui
+ présente trois onglets :
+ - Mesures      : Température et pression
+ - Debug        : Affichage des messages
+ - Paramétrages : Délais des mesures, wifi
+
+ Par soucis de simplicité, on passe de 4 fichiers .ino
+ à un seul fichier .cpp
+*/
+
+/*
  This code has been made by Neodyme under the MIT license
  Youtube : https://www.youtube.com/neodymetv
  Twitch : https://www.twitch.tv/ioodyme
@@ -30,8 +47,8 @@ unsigned long print_delay = 1000;
 
 bool bMesure = true;
 
-//  String myLog[10];// = {"","","","","","","","","",""};
 String myLog1, myLog2, myLog3, myLog4;
+
 // G22 -> SCL
 // G21 -> SDA
 // VCC -> 3.3
@@ -73,7 +90,7 @@ unsigned long last_millis = 0;
 //ESPUI=================================================================================================================
 #include <ESPUI.h>
 uint16_t wifi_ssid_text, wifi_pass_text, wifi_ssid_timeout_text;
-uint16_t mesure_temp_text, mesure_pres_text, cmdMesure; // , cmdMesureOff;
+uint16_t mesure_temp_text, mesure_pres_text, cmdMesure;
 uint16_t param_delay_temp_text, param_delay_pres_text;
 uint16_t mqtt_server_text, mqtt_topic_in_text, mqtt_topic_out_text, mqtt_user_text, mqtt_pass_text, mqtt_enabled_switch;
 uint16_t statusLabelId, serialLabelId;
@@ -112,7 +129,6 @@ String splitString(String data, char separator, int index) {
 
 int maxLog = 0;
 void println(String s) {
-  //if (millis() - last_print_millis >= print_delay) {
     Serial.println(s);
     myLog1 = myLog2;
     myLog2 = myLog3;
@@ -122,26 +138,6 @@ void println(String s) {
     ESPUI.print(labelLog2, myLog2);
     ESPUI.print(labelLog3, myLog3);
     ESPUI.print(labelLog4, myLog4);
-    // for(int i = 10; i >= 1; i--) {
-    //   myLog[i-1] = myLog[i];
-    //   ESPUI.print(labelLog[i-1], myLog[i-1]);
-    // }
-    // myLog[9] = s;
-    // ESPUI.print(labelLog[9], myLog[9]);
-
-    //   if (i<maxLog) {
-    //     myLog[i] = myLog[i+1];
-    //   } else {
-    //     myLog[maxLog] = s;
-    //   }
-
-    //   if (myLog[i] != "" && i>maxLog) {
-    //     maxLog = i;
-    //   }
-    //   ESPUI.print(labelLog[i], myLog[i]);
-    // }
-    // last_print_millis = millis();
-  //}
 }
 void println(int i) {
   println(String(i));
@@ -151,13 +147,8 @@ void println() {
 }
 
 void print(String s) {
-  //if (millis() - last_print_millis >= print_delay) {
-    // myLog[9] += s;
     myLog4 += s;
     Serial.print(s);
-    // ESPUI.print(statusLabelId, myLog[9]);
-    //last_print_millis = millis();
-  //}
 }
 void print(int i) {
   print(String(i));
@@ -217,12 +208,6 @@ void ESPReset(Control *sender, int type) {
 }
 //ESP Reset=================================
 //CMD MESURER=================================
-// void setCmdMesure() {
-//     ESPUI.updateButton(cmdMesureOn, bMesure ? "Pause" : "Reprendre");
-//     ESPUI.setEnabled(cmdMesureOn, true);
-//     // ESPUI.setEnabled(cmdMesureOff, !bMesure);
-    
-// }
 void cmdMesurer(Control *sender, int type) {
   if (type == B_UP) {
     bMesure = !bMesure;
@@ -231,12 +216,6 @@ void cmdMesurer(Control *sender, int type) {
   ESPUI.updateButton(cmdMesure, bMesure ? "Pause" : "Reprendre");
     
 }
-// void cmdMesurerOff(Control *sender, int type) {
-//   if (type == B_UP) {
-//     bMesure = true;
-//     setCmdMesure();
-//   }
-// }
 //CMD MESURER=================================
 
 //ESPUI=====================================================================================================================
@@ -255,10 +234,7 @@ void espui_init() {
   mesure_temp_text = ESPUI.addControl(Label, "Température", "", Peterriver, mesuretab, textCallback);
   mesure_pres_text = ESPUI.addControl(Label, "Pression", "", Peterriver, mesuretab, textCallback);
   cmdMesure = ESPUI.addControl(Button, "", "Pause", Peterriver, mesuretab, cmdMesurer);
-  // cmdMesureOff = ESPUI.addControl(Button, "", "Reprendre", Peterriver, mesuretab, cmdMesurerOff);
-  
   ESPUI.setEnabled(cmdMesure, true);
-  // ESPUI.setEnabled(cmdMesureOff, false);
   //Mesure-------------------------------------------------------------------------------------------------------------------
 
   
@@ -270,33 +246,6 @@ void espui_init() {
   statusLabelId = ESPUI.addControl(Label, "", "Serial OUT", Peterriver, serialLabelId, textCallback);
   labelLog3 = ESPUI.addControl(Text, "", myLog3, Peterriver, debug, textCallback);
   labelLog4 = ESPUI.addControl(Text, "", myLog4, Peterriver, labelLog3, textCallback);
-
-  // for (int i = 0; i < 5; i++) {
-  //   for(int j = 0; j < 2; j++) {
-  //     if (i % 2 == 0) {
-  //       if (j==0) {
-  //         labelLog[i+j] = ESPUI.addControl(Text, "", myLog[i+j], Peterriver, debug, textCallback);
-  //       } else {
-  //         labelLog[i+j] = ESPUI.addControl(Text, "", myLog[i+j], Peterriver, labelLog[i+j-1], textCallback);
-  //       }
-  //       ESPUI.setEnabled(labelLog[i], true);
-  //     } else {
-  //       if (j==0) {
-  //         tempText = ESPUI.addControl(Text, "", "", Peterriver, debug, textCallback);
-  //       } else {
-  //         ESPUI.addControl(Text, "", "", Peterriver, tempText, textCallback);
-  //       }
-  //     }
-  //   }
-  //   ESPUI.setEnabled(labelLog[i], true);
-  // // for(int i = 0; i < 10; i++) {
-  // //   if (i==0) {
-  // //     labelLog[i] = ESPUI.addControl(Text, "", myLog[i], Peterriver, debug, textCallback);
-  // //   } else {
-  // //     labelLog[i] = ESPUI.addControl(Text, "", myLog[i], Peterriver, labelLog[i-1], textCallback);
-  // //   }
-    
-  // }
   //Debug-----------------------------------------------------------------------------------------------
 
   //Param-----------------------------------------------------------------------------------------------
@@ -379,9 +328,6 @@ void mqtt_loop() {
 }
 //MQTT LOOP===================================
 
-
-
-
 //Custom callback================================
 void CustomCallback(Control *sender, int type) {
   //Your code HERE !
@@ -407,12 +353,6 @@ void mqtt_callback(String topic, byte *message, unsigned int length) {
   //Custom action................................................
 }
 //MQTT CALLBACK===================================================
-
-
-
-
-
-
 
 //Serial setup===============================================================
 void SerialSetup(String input) {
@@ -501,12 +441,6 @@ void SerialSetup(String input) {
     print("IP :");
     println(WiFi.getMode() == WIFI_AP ? WiFi.softAPIP() : WiFi.localIP());
   }
-
-  // else if (input.indexOf("custom_cmd") > -1) {
-  //   String demo_cmd = splitString(input, ' ', 1);
-  //   println(demo_cmd);
-  //   preferences.putString("demo", "demo_cmd");
-  // }
 }
 //Serial setup===================================================================
 
@@ -557,73 +491,14 @@ void wifi_init() {
 //Temperature================================================================================
 void temp_init() {
   stored_delay_temp = preferences.getInt("delay_temp", 1000);
-  // println(9600);
-  // DS18B20.begin();    // initialize the DS18B20 sensor
-  //  Serial.begin(9600);
   println("Devices: " + String(ds.getNumberOfDevices()));
 }
 void temp_loop() {
-  // DS18B20.requestTemperatures();       // send the command to get temperatures
-  // tempC = DS18B20.getTempCByIndex(0);  // read temperature in °C
-  // tempF = tempC * 9 / 5 + 32; // convert °C to °F
-
-  // print("Temperature: ");
-  // print(tempC);    // print the temperature in °C
-  // print("°C");
-  // print("  ~  ");  // separator between °C and °F
-  // print(tempF);    // print the temperature in °F
-  // println("°F");
-
-  // delay(500);
-  
-  //while (ds.selectNext()) {
-    // switch (ds.getFamilyCode()) {
-    //   case MODEL_DS18S20:
-    //     println("Model: DS18S20/DS1820");
-    //     break;
-    //   case MODEL_DS1822:
-    //     println("Model: DS1822");
-    //     break;
-    //   case MODEL_DS18B20:
-    //     println("Model: DS18B20");
-    //     break;
-    //   default:
-    //     println("Unrecognized Device");
-    //     break;
-    // }
-
-    // uint8_t address[8];
-    // ds.getAddress(address);
-
-    // print("Address:");
-    // for (uint8_t i = 0; i < 8; i++) {
-    //   print(" ");
-    //   print(address[i]);
-    // }
-    // println();
-
-    // print("Resolution: ");
-    // println(ds.getResolution());
-
-    // print("Power Mode: ");
-    // if (ds.getPowerMode()) {
-    //   println("External");
-    // } else {
-    //   println("Parasite");
-    // }
-
     if (bMesure && millis() - last_temp_millis >= stored_delay_temp) {
       println("Temperature: " + String(ds.getTempC()) + " C");
-      // print(ds.getTempF());
-      // println(" F");
-      // println();
       ESPUI.print(mesure_temp_text, String(ds.getTempC()) + " C");
       last_temp_millis = millis();
     }
-    
-  // }
-
-  // delay(2000);
 }
 //Temperature================================================================================
 
@@ -637,7 +512,6 @@ void pression_init() {
   if (!bmp.begin(0x76)) {
     println(F("Could not find a valid BMP280 sensor at 0x76, check wiring or "
                       "try a different address!"));
-    // while (1) delay(10);
   } else {
 
     /* Default settings from datasheet. */
@@ -658,17 +532,7 @@ void pression_loop() {
 
       float pres = bmp.readPressure();
       println("Pressure = " + String(pres / 100.0F) + " hPa");
-      
-      // print(pres);
-      // println(" Pa");
       ESPUI.print(mesure_pres_text, String(pres / 100.0F) + " hPa");
-
-      // print(F("Approx altitude = "));
-      // print(bmp.readAltitude(0.0)); /* Adjusted to local forecast! */
-      // println(" m");
-
-      // println();
-      //delay(2000);
     } else {
       println("Forced measurement failed!");
     }
@@ -681,18 +545,14 @@ void pression_loop() {
 
 //SETUP=========================
 void setup() {
-
-  //Custom setup...............
-  //Your code HERE !
-  //Custom setup...............
-
   Serial.begin(115200);
   println();
-  //pinMode(LED_BUILTIN, OUTPUT);
   preferences.begin("Settings");
   wifi_init();
+  //Custom setup...............
   temp_init();
   pression_init();
+  //Custom setup...............
   espui_init();
 }
 //SETUP=========================
@@ -706,10 +566,9 @@ void loop() {
     SerialSetup(input);
   }
   mqtt_loop();
+  //Custom loop.................................
   temp_loop();
   pression_loop();
-  //Custom loop.................................
-  //Your code HERE !
   //Custom loop.................................
 }
 //LOOP==========================================
