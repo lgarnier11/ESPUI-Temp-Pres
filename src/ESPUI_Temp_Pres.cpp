@@ -105,7 +105,7 @@ bool mqtt_enabled = false;
 //ESPUI==================================================================================================================
 
 //Custom libraries..............
-//Your code HERE !
+
 //Default ESPUI callback======================
 void textCallback(Control *sender, int type) {
 }
@@ -127,6 +127,7 @@ String splitString(String data, char separator, int index) {
 }
 //Split String===========================================================
 
+// gestion du défilement de l'affichage
 int maxLog = 0;
 void println(String s) {
     Serial.println(s);
@@ -495,8 +496,15 @@ void temp_init() {
 }
 void temp_loop() {
     if (bMesure && millis() - last_temp_millis >= stored_delay_temp) {
-      println("Temperature: " + String(ds.getTempC()) + " C");
-      ESPUI.print(mesure_temp_text, String(ds.getTempC()) + " C");
+      String temperature_value = String(ds.getTempC());
+      println("Temperature: " + temperature_value + " C");
+      ESPUI.print(mesure_temp_text, temperature_value + " C");
+      // transmission pour atelier Livet
+      // mot clé début : temperature
+      // valeur        : valeur (avec . en séparateur décimal)
+      // mot clé fin   : %
+      Serial.print("temperature" + temperature_value + "%");
+
       last_temp_millis = millis();
     }
 }
@@ -531,8 +539,15 @@ void pression_loop() {
       println("Temperature = " + String(bmp.readTemperature()) + " *C");
 
       float pres = bmp.readPressure();
-      println("Pressure = " + String(pres / 100.0F) + " hPa");
-      ESPUI.print(mesure_pres_text, String(pres / 100.0F) + " hPa");
+      String pression_value = String(pres / 100.0F);
+      println("Pressure = " + pression_value + " hPa");
+      ESPUI.print(mesure_pres_text, pression_value + " hPa");
+      // transmission pour atelier Livet
+      // mot clé début : pression
+      // valeur        : valeur (avec . en séparateur décimal)
+      // mot clé fin   : #
+      Serial.print("pression" + pression_value + "#");
+
     } else {
       println("Forced measurement failed!");
     }
