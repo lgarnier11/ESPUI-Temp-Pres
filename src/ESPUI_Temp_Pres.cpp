@@ -1,5 +1,8 @@
 /*
  lgarnier11
+ v1.1.1 - 21/05/2023
+ Mise en commentaire de la gestion de la pression (le module consomme trop)
+ Mise en commentaire de la communication vers l'application Livet
  v1.1.0 - 07/02/2023
  Adaptation en c++ du "framework" Arduino de Neodyme.
  Utilisation pour gérer une sonde de température (étanche) et
@@ -46,6 +49,7 @@ unsigned long last_print_millis = 0;
 unsigned long print_delay = 1000;
 
 bool bMesure = true;
+bool bMesurePresure = false;
 
 String myLog1, myLog2, myLog3, myLog4;
 
@@ -75,7 +79,7 @@ Preferences preferences;
 #define DNS_PORT 53
 IPAddress apIP(192, 168, 4, 1);
 DNSServer dnsServer;
-const char* hostname = "ESPUI-Temp-Pression-1.1.0";
+const char* hostname = "ESPUI-Temp-Pression-1.1.1";
 bool wificonnected = false;
 //Web server==================================
 
@@ -499,11 +503,12 @@ void temp_loop() {
       String temperature_value = String(ds.getTempC());
       println("Temperature: " + temperature_value + " C");
       ESPUI.print(mesure_temp_text, temperature_value + " C");
-      // transmission pour atelier Livet
-      // mot clé début : temperature
-      // valeur        : valeur (avec . en séparateur décimal)
-      // mot clé fin   : %
-      Serial.print("temperature" + temperature_value + "%");
+      // mise en commentaire de la transmissio pour Livet
+        // transmission pour atelier Livet
+        // mot clé début : temperature
+        // valeur        : valeur (avec . en séparateur décimal)
+        // mot clé fin   : %
+      // Serial.print("temperature" + temperature_value + "%");
 
       last_temp_millis = millis();
     }
@@ -513,25 +518,29 @@ void temp_loop() {
 //Pression================================================================================
 void pression_init() {
   stored_delay_pres = preferences.getInt("delay_pres", 1000);
+
+  if (bMesurePresure) {
     println(F("BMP280 Forced Mode Test."));
 
-  //if (!bmp.begin(BMP280_ADDRESS_ALT, BMP280_CHIPID)) {
-  
-  if (!bmp.begin(0x76)) {
-    println(F("Could not find a valid BMP280 sensor at 0x76, check wiring or "
-                      "try a different address!"));
-  } else {
+    //if (!bmp.begin(BMP280_ADDRESS_ALT, BMP280_CHIPID)) {
+    
+    if (!bmp.begin(0x76)) {
+      println(F("Could not find a valid BMP280 sensor at 0x76, check wiring or "
+                        "try a different address!"));
+    } else {
 
-    /* Default settings from datasheet. */
-    bmp.setSampling(Adafruit_BMP280::MODE_FORCED,     /* Operating Mode. */
-                    Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
-                    Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
-                    Adafruit_BMP280::FILTER_X16,      /* Filtering. */
-                    Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+      // Default settings from datasheet.
+      bmp.setSampling(Adafruit_BMP280::MODE_FORCED,     // Operating Mode.
+                      Adafruit_BMP280::SAMPLING_X2,     // Temp. oversampling
+                      Adafruit_BMP280::SAMPLING_X16,    // Pressure oversampling
+                      Adafruit_BMP280::FILTER_X16,      // Filtering.
+                      Adafruit_BMP280::STANDBY_MS_500); // Standby time.
+    }
   }
 }
+
 void pression_loop() {
-  if (bMesure && millis() - last_pres_millis >= stored_delay_pres) {
+  if (bMesure && bMesurePresure && millis() - last_pres_millis >= stored_delay_pres) {
     // must call this to wake sensor up and get new measurement data
     // it blocks until measurement is complete
     if (bmp.takeForcedMeasurement()) {
@@ -539,6 +548,7 @@ void pression_loop() {
       println("Temperature = " + String(bmp.readTemperature()) + " *C");
 
       float pres = bmp.readPressure();
+
       String pression_value = String(pres / 100.0F);
       println("Pressure = " + pression_value + " hPa");
       ESPUI.print(mesure_pres_text, pression_value + " hPa");
@@ -566,6 +576,7 @@ void setup() {
   wifi_init();
   //Custom setup...............
   temp_init();
+
   pression_init();
   //Custom setup...............
   espui_init();
@@ -583,6 +594,7 @@ void loop() {
   mqtt_loop();
   //Custom loop.................................
   temp_loop();
+
   pression_loop();
   //Custom loop.................................
 }
