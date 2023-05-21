@@ -1,5 +1,8 @@
 # ESPUI-Temp-pres
  lgarnier11<br/>
+ v1.1.1 - 21/05/2023<br/>
+ Mise en commentaire de la gestion de la pression (le module consomme trop)<br/>
+ Mise en commentaire de la communication vers l'application Livet<br/>
  v1.1.0 - 07/02/2023<br/>
  Adaptation en c++ du "framework" Arduino de Neodyme (afin d'utiliser vscode...).<br/>
  Objectif : gestion d'une sonde de température (étanche) et d'une sonde de pression.<br/>
