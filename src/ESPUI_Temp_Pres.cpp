@@ -1,5 +1,8 @@
 /*
  lgarnier11
+ v1.1.2 - 22/05/2023
+ si PRESSURE_MEASUREMENT n'est pas défini, on ne charge pas la librairie BMP280 (#define PRESSURE_MEASUREMENT)
+ refactoring des logs
  v1.1.1 - 21/05/2023
  Mise en commentaire de la gestion de la pression (le module consomme trop)
  Mise en commentaire de la communication vers l'application Livet
@@ -26,16 +29,21 @@
  ESPUI documentation : https://github.com/s00500/ESPUI#readme
 */
 #include <Arduino.h>
-
+#include <vector>
+#include <Time.h>
+#include <ESPUI.h>
+#ifdef PRESSURE_MEASUREMENT
 #include <Adafruit_BMP280.h>
+#endif
 
 #define BMP_SCK  (13)
 #define BMP_MISO (12)
 #define BMP_MOSI (11)
 #define BMP_CS   (10)
 
+#ifdef PRESSURE_MEASUREMENT
 Adafruit_BMP280 bmp; // I2C
-
+#endif
 #include <DS18B20.h>
 
 DS18B20 ds(0);
@@ -49,9 +57,12 @@ unsigned long last_print_millis = 0;
 unsigned long print_delay = 1000;
 
 bool bMesure = true;
-bool bMesurePresure = false;
+bool forceHotspot = true;
 
 String myLog1, myLog2, myLog3, myLog4;
+const int MAX_MESSAGES = 20;
+// Déclaration d'une variable globale pour stocker les messages reçus
+std::vector<String> messageLog;
 
 // G22 -> SCL
 // G21 -> SDA
@@ -68,6 +79,7 @@ String myLog1, myLog2, myLog3, myLog4;
 #include <ESP8266WiFi.h>
 #elif defined ESP32
 #include <WiFi.h>
+#include <WiFiType.h>
 #define LED_BUILTIN 2
 #else
 #error Architecture unrecognized by this code.
@@ -79,7 +91,7 @@ Preferences preferences;
 #define DNS_PORT 53
 IPAddress apIP(192, 168, 4, 1);
 DNSServer dnsServer;
-const char* hostname = "ESPUI-Temp-Pression-1.1.1";
+const char* hostname = "ESPUI-Temp-Pression-1.1.2";
 bool wificonnected = false;
 //Web server==================================
 
@@ -113,6 +125,22 @@ bool mqtt_enabled = false;
 //Default ESPUI callback======================
 void textCallback(Control *sender, int type) {
 }
+
+String getCurrentTime() {
+  // Obtenir l'heure actuelle
+  time_t now = time(nullptr);
+
+  // Convertir l'heure en une structure tm
+  struct tm timeinfo;
+  gmtime_r(&now, &timeinfo);
+
+  // Formater la chaîne de l'heure
+  char buffer[9];
+  sprintf(buffer, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+  // Retourner la chaîne formatée
+  return String(buffer);
+}
 //Default ESPUI callback======================
 //Split String===========================================================
 String splitString(String data, char separator, int index) {
@@ -133,16 +161,39 @@ String splitString(String data, char separator, int index) {
 
 // gestion du défilement de l'affichage
 int maxLog = 0;
+int maxTempMessage = 0;
+
+const int MAX_TEMP_MESSAGE = 3;
 void println(String s) {
     Serial.println(s);
-    myLog1 = myLog2;
+    s = myLog4 + s;
+    myLog4 = "";
+    
+    /*myLog1 = myLog2;
     myLog2 = myLog3;
     myLog3 = myLog4;
     myLog4 = s;
     ESPUI.print(labelLog1, myLog1);
     ESPUI.print(labelLog2, myLog2);
     ESPUI.print(labelLog3, myLog3);
-    ESPUI.print(labelLog4, myLog4);
+    ESPUI.print(labelLog4, myLog4);*/
+
+    //if (! s.startsWith("Temperature:")) {
+      // Ajoute le message à la fin du log
+      messageLog.push_back(s);
+
+      // Si le log dépasse 10 messages, supprime le plus ancien
+      if (messageLog.size() > MAX_MESSAGES) {
+          messageLog.erase(messageLog.begin());
+      }
+      // sauve les messages logués
+      int i = 0;
+      for (const String& message : messageLog) {
+        preferences.putString("labelLog" + i++, message);
+      }
+      
+    //}
+    
 }
 void println(int i) {
   println(String(i));
@@ -212,6 +263,21 @@ void ESPReset(Control *sender, int type) {
   }
 }
 //ESP Reset=================================
+
+//Clear Log=================================
+void ClearLog(Control *sender, int type) {
+  if (type == B_UP) {
+    Serial.println("Clear Log !");
+    messageLog.clear();
+    for (int i = 0; i < MAX_MESSAGES; i++)
+    {
+      preferences.putString("labelLog" + i, "");  
+    }
+  }
+}
+//Clear Log=================================
+
+
 //CMD MESURER=================================
 void cmdMesurer(Control *sender, int type) {
   if (type == B_UP) {
@@ -275,6 +341,7 @@ void espui_init() {
 
   auto paramsave = ESPUI.addControl(Button, "Save", "Save", Peterriver, param, SaveWifiDetailsCallback);
   auto espreset = ESPUI.addControl(Button, "", "Reboot ESP", None, paramsave, ESPReset);
+  auto clearMessageLog = ESPUI.addControl(Button, "", "Clear LOG", None, paramsave, ClearLog);
 
   ESPUI.setEnabled(param_delay_temp_text, true);
   ESPUI.setEnabled(param_delay_pres_text, true);
@@ -463,32 +530,64 @@ void wifi_init() {
   stored_mqtt_topic_out = preferences.getString("mqtt_topic_out", "demo/out");
   mqtt_enabled = preferences.getBool("mqtt_enabled", false);
 
+  Serial.print("Begin last ");
+  Serial.print(MAX_MESSAGES);
+  Serial.println(" messages :");
+  for (int i = 0; i < MAX_MESSAGES; i++)
+  {
+    Serial.println(preferences.getString("labelLog" + i));  
+  }
+  Serial.print("End last ");
+  Serial.print(MAX_MESSAGES);
+  Serial.println(" messages.");
   //Custom preferences............................................
   //Your code HERE !
   //int demo_last_reading = preferences.getInt("last_reading", 0);
   //Custom preferences............................................
 
-  println("Connecting to : " + stored_ssid);
+  
   WiFi.begin(stored_ssid.c_str(), stored_pass.c_str());
   uint8_t timeout = stored_ssid_timeout;
-  while (timeout && WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    print(".");
-    timeout--;
+  if (!forceHotspot) {
+    println("Connecting to : " + stored_ssid);
+    // try to connect to wifi
+    while (timeout && WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      print(".");
+      timeout--;
+    }
+  } else {
+    delay(2000);
   }
-  if (WiFi.status() != WL_CONNECTED) {
+  print("WiFi.status() : ");
+  print(WiFi.status());
+  print(" WL_CONNECTED : ");
+  println(WL_CONNECTED);
+  if (forceHotspot || WiFi.status() != WL_CONNECTED) {
     wificonnected = false;
-    print("\n\nCreating Hotspot");
+    if (forceHotspot) {
+      print("(FORCE) ");
+    }
+    println("Creating Hotspot");
+    
     WiFi.mode(WIFI_AP);
     delay(100);
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
     WiFi.softAP(hostname);
+    delay(1000);
   } else {
+    println("Connected");
     wificonnected = true;
     client.setServer(stored_mqtt_server.c_str(), 1883);
     client.setCallback(mqtt_callback);
   }
   dnsServer.start(DNS_PORT, "*", apIP);
+  delay(100);
+  print("WiFi.getMode : ");
+  print(WiFi.getMode());
+  print(" WIFI_AP : ");
+  println(WIFI_AP);
+  
   print("\nIP address : ");
   println(WiFi.getMode() == WIFI_AP ? WiFi.softAPIP() : WiFi.localIP());
 }
@@ -515,32 +614,32 @@ void temp_loop() {
 }
 //Temperature================================================================================
 
+#ifdef PRESSURE_MEASUREMENT
 //Pression================================================================================
 void pression_init() {
   stored_delay_pres = preferences.getInt("delay_pres", 1000);
 
-  if (bMesurePresure) {
-    println(F("BMP280 Forced Mode Test."));
+  println(F("BMP280 Forced Mode Test."));
 
-    //if (!bmp.begin(BMP280_ADDRESS_ALT, BMP280_CHIPID)) {
-    
-    if (!bmp.begin(0x76)) {
-      println(F("Could not find a valid BMP280 sensor at 0x76, check wiring or "
-                        "try a different address!"));
-    } else {
+  //if (!bmp.begin(BMP280_ADDRESS_ALT, BMP280_CHIPID)) {
+  
+  if (!bmp.begin(0x76)) {
+    println(F("Could not find a valid BMP280 sensor at 0x76, check wiring or "
+                      "try a different address!"));
+  } else {
 
-      // Default settings from datasheet.
-      bmp.setSampling(Adafruit_BMP280::MODE_FORCED,     // Operating Mode.
-                      Adafruit_BMP280::SAMPLING_X2,     // Temp. oversampling
-                      Adafruit_BMP280::SAMPLING_X16,    // Pressure oversampling
-                      Adafruit_BMP280::FILTER_X16,      // Filtering.
-                      Adafruit_BMP280::STANDBY_MS_500); // Standby time.
-    }
+    // Default settings from datasheet.
+    bmp.setSampling(Adafruit_BMP280::MODE_FORCED,     // Operating Mode.
+                    Adafruit_BMP280::SAMPLING_X2,     // Temp. oversampling
+                    Adafruit_BMP280::SAMPLING_X16,    // Pressure oversampling
+                    Adafruit_BMP280::FILTER_X16,      // Filtering.
+                    Adafruit_BMP280::STANDBY_MS_500); // Standby time.
   }
+
 }
 
 void pression_loop() {
-  if (bMesure && bMesurePresure && millis() - last_pres_millis >= stored_delay_pres) {
+  if (bMesure && millis() - last_pres_millis >= stored_delay_pres) {
     // must call this to wake sensor up and get new measurement data
     // it blocks until measurement is complete
     if (bmp.takeForcedMeasurement()) {
@@ -565,19 +664,25 @@ void pression_loop() {
   }
 
 }
+#endif
 //Pression================================================================================
 //Custom libraries..............
 
 //SETUP=========================
 void setup() {
   Serial.begin(115200);
-  println();
+  while (!Serial); // Attendre que la connexion série soit établie
+  
   preferences.begin("Settings");
+
+  //println("Time : " + getCurrentTime());
   wifi_init();
   //Custom setup...............
   temp_init();
 
+  #ifdef PRESSURE_MEASUREMENT
   pression_init();
+  #endif
   //Custom setup...............
   espui_init();
 }
@@ -595,7 +700,9 @@ void loop() {
   //Custom loop.................................
   temp_loop();
 
+  #ifdef PRESSURE_MEASUREMENT
   pression_loop();
+  #endif
   //Custom loop.................................
 }
 //LOOP==========================================

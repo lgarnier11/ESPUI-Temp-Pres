@@ -1,5 +1,8 @@
 # ESPUI-Temp-pres
  lgarnier11<br/>
+ v1.1.2 - 22/05/2023<br/>
+ si PRESSURE_MEASUREMENT n'est pas défini, on ne charge pas la librairie BMP280 (#define PRESSURE_MEASUREMENT)<br/>
+ refactoring des logs<br/>
  v1.1.1 - 21/05/2023<br/>
  Mise en commentaire de la gestion de la pression (le module consomme trop)<br/>
  Mise en commentaire de la communication vers l'application Livet<br/>
